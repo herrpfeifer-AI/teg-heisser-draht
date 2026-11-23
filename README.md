@@ -1,4 +1,4 @@
-# Lichtwächter-Labor
+# Heisser Draht
 
 Lern-App zu Stromkreisen für das Werken-Projekt «Heisser Draht» (5. Klasse).
 Statische Seite (index.html, js/) + eine Vercel-Funktion (api/api.js, Neon Postgres, Tabelle lw_kv).

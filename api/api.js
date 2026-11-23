@@ -1,4 +1,5 @@
-// Lichtwächter-Labor – API (eine Funktion, Aktionen per JSON-Body)
+import { createHmac as _hmacAusweis, timingSafeEqual as _tseAusweis } from 'node:crypto';
+// Heisser Draht – API (eine Funktion, Aktionen per JSON-Body)
 import crypto from 'node:crypto';
 import { SEED_VERSION, SEED_CLASSES } from '../lib/seed.js';
 
@@ -99,6 +100,19 @@ async function runSeed(idx){
   await writeJSON('seed.json', { v: SEED_VERSION, t: Date.now() });
 }
 
+
+// ---- Ausweis aus der Schapp (lib/ausweis.ts dort): Daten.Unterschrift, HMAC-SHA256 mit AUSWEIS_SECRET ----
+function pruefeAusweis(a){
+  const geheim = process.env.AUSWEIS_SECRET; if (!geheim) return null;
+  const [daten, sig] = String(a || '').split('.'); if (!daten || !sig) return null;
+  const soll = _hmacAusweis('sha256', geheim).update(daten).digest('base64url');
+  const A = Buffer.from(sig), B = Buffer.from(soll);
+  if (A.length !== B.length || !_tseAusweis(A, B)) return null;
+  let p; try{ p = JSON.parse(Buffer.from(daten, 'base64url').toString('utf8')); }catch(e){ return null; }
+  if (!p || p.app !== 'heisser-draht' || !p.k || !(p.exp > Date.now())) return null;
+  return p;
+}
+
 const failures = new Map();
 function cleanState(st){
   // nur bekannte, kleine Felder übernehmen
@@ -134,6 +148,25 @@ export default async function handler(req, res){
       for (const c of await allClasses(idx)){ const s = (c.students||[]).find(x => safeEq(x.pin, pin)); if (s){ hit = {c, s}; break; } }
       if (!hit){ failures.set(key, {n:f.n+1, t:Date.now()}); await sleep(600); return res.status(401).json({error:'Diesen Code gibt es nicht. Schau nochmals auf deine Karte.'}); }
       failures.delete(key);
+      return res.json({ token: sign({r:'s', sid:hit.s.id, c:hit.c.code, exp:Date.now()+90*DAY}), name:hit.s.name, klasse:hit.c.name });
+    }
+    if (a === 'loginAusweis'){
+      const p = pruefeAusweis(body.ausweis);
+      if (!p) return res.status(401).json({error:'Der Zugang aus der Schapp ist abgelaufen. Tippe in der Schapp nochmals auf die Kachel.'});
+      const idx = await getIndex();
+      await runSeed(idx);
+      const all = await allClasses(idx);
+      let hit = null;
+      for (const c of all){ const s = (c.students||[]).find(x => x.schapp === p.k); if (s){ hit = {c, s}; break; } }
+      if (!hit){
+        const kl = String(p.kl || '').trim().toLowerCase();
+        let c = all.find(x => String(x.name).trim().toLowerCase() === kl);
+        if (!c){ let code; do { code = genCode(6); } while (idx.classes.includes(code)); c = { code, name: String(p.kl || 'Klasse'), created: Date.now(), students: [], settings: Object.assign({}, DEFAULT_CLASS_SETTINGS) }; idx.classes.push(code); await writeJSON('index.json', idx); }
+        c.students = c.students || [];
+        let s = c.students.find(x => !x.schapp && String(x.name).trim().toLowerCase() === String(p.n || '').trim().toLowerCase());
+        if (!s){ s = { id: genId(), name: cleanName(p.n) || 'Kind', pin: uniquePin(await usedPins(idx)), created: Date.now() }; c.students.push(s); }
+        s.schapp = p.k; await saveClass(c); hit = {c, s};
+      }
       return res.json({ token: sign({r:'s', sid:hit.s.id, c:hit.c.code, exp:Date.now()+90*DAY}), name:hit.s.name, klasse:hit.c.name });
     }
     if (a === 'teacherLogin'){

@@ -20,14 +20,14 @@ export function lehrer(app){
 }
 
 function frame(app, title, inner){
-  app.innerHTML = `<div class="light screen"><header class="top noprint"><a class="back" href="/#/" style="background:#EEF0F8;color:#1B1E2E">‹</a><div><div class="eyebrow">Lehrerbereich · Lichtwächter-Labor</div><div class="h1">${esc(title)}</div></div><div class="spacer"></div><div id="tb" style="display:flex;gap:8px"></div><button class="btn ghost small" id="logout">Abmelden</button></header><div style="padding:22px 28px;overflow:auto;flex:1" id="body">${inner}</div></div>`;
+  app.innerHTML = `<div class="light screen"><header class="top noprint"><a class="back" href="/#/" style="background:#EEF0F8;color:#1B1E2E">‹</a><div><div class="eyebrow">Lehrerbereich · Heisser Draht</div><div class="h1">${esc(title)}</div></div><div class="spacer"></div><div id="tb" style="display:flex;gap:8px"></div><button class="btn ghost small" id="logout">Abmelden</button></header><div style="padding:22px 28px;overflow:auto;flex:1" id="body">${inner}</div></div>`;
   app.querySelector('#logout').onclick = () => { token = null; localStorage.removeItem('lw-teacher'); lehrer(app); };
   return app.querySelector('#body');
 }
 
 function login(app){
   app.innerHTML = `<div class="light screen" style="align-items:center;justify-content:center"><div class="card" style="width:420px;box-shadow:0 10px 40px rgba(0,0,0,.08)">
-   <div class="eyebrow">Lichtwächter-Labor</div><div class="h1" style="margin-bottom:14px">Lehrerbereich</div>
+   <div class="eyebrow">Heisser Draht</div><div class="h1" style="margin-bottom:14px">Lehrerbereich</div>
    <input class="inp" type="password" id="pw" placeholder="Passwort" style="width:100%"><button class="btn" id="go" style="width:100%;margin-top:12px">Anmelden</button>
    <p style="margin-top:12px;font-size:14px;color:#6B74A0"><a href="/#/" style="text-decoration:underline">Zurück zur Kinder-Ansicht</a></p></div></div>`;
   const go = async () => {
@@ -81,7 +81,7 @@ async function klasse(app, code){
       <div class="card" style="flex:1;min-width:300px"><b>Kinder hinzufügen</b> (ein Name pro Zeile)<textarea class="inp" id="names" rows="3" style="width:100%;margin-top:8px"></textarea><button class="btn small" id="add" style="margin-top:8px">Hinzufügen</button></div>
       <div class="card" style="flex:1;min-width:300px"><b>Code-Kärtchen</b><p style="color:#4A5070;margin:6px 0 10px">Jedes Kind meldet sich mit seinem 4-stelligen Code an.</p><button class="btn small" id="print">Kärtchen drucken</button></div>
      </div>
-     <div class="codecards" id="cards" style="display:none;margin-top:20px">${c.students.map(s => `<div class="codecard"><div style="font-size:13px">Lichtwächter-Labor · ${esc(location.host)}</div><div style="font-size:18px;font-weight:800;margin:4px 0">${esc(s.name)}</div><b>${s.pin}</b></div>`).join('')}</div>`;
+     <div class="codecards" id="cards" style="display:none;margin-top:20px">${c.students.map(s => `<div class="codecard"><div style="font-size:13px">Heisser Draht · ${esc(location.host)}</div><div style="font-size:18px;font-weight:800;margin:4px 0">${esc(s.name)}</div><b>${s.pin}</b></div>`).join('')}</div>`;
     body.querySelector('#all').onchange = saveSettings; body.querySelector('#games').onchange = saveSettings;
     body.querySelector('#add').onclick = async () => { const names = body.querySelector('#names').value.split('\n').map(x => x.trim()).filter(Boolean); if (!names.length) return; await tapi('t.addStudents', { code, names }); load(); };
     body.querySelector('#print').onclick = () => { const el = body.querySelector('#cards'); el.style.display = 'grid'; setTimeout(() => { window.print(); el.style.display = 'none'; }, 100); };

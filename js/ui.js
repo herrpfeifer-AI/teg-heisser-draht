@@ -38,7 +38,7 @@ export const STATIONS = [
   { id:'ab3', nr:'AB 3', name:'Stromkreis-Detektiv', sub:'Wie funktioniert der Heisse Draht?', col:2 },
   { id:'ab4', nr:'AB 4', name:'Fehler-Detektiv', sub:'Warum leuchtet das Lämpchen nicht?', col:2 },
   { id:'wort', nr:'', name:'Wortkarten', sub:'die Batterie · das Kabel · leiten …', col:2 },
-  { id:'hd', nr:'', name:'Heisser Draht', sub:'Fahre mit dem Finger – nicht berühren!', col:3 },
+  { id:'hd', nr:'', name:'Draht-Spiel', sub:'Fahre mit dem Finger – nicht berühren!', col:3 },
   { id:'sr', nr:'', name:'Schalter-Rätsel', sub:'Kippe die Schalter, bis alles leuchtet.', col:3 },
 ];
 const NEEDS = { p2:'p1', p3:'p2', p4:'p3', p5:'p4', p6:'p4', ab3:'p2', ab4:'p3', sr:'p3' };

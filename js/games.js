@@ -55,7 +55,7 @@ export function heisserDraht(root){
     const W = world(); R = W.R; P = sample(W.path); state = 'ready'; errors = 0; prog = 0; lit = false; clearInterval(timer);
     ring = { x: P[0].x, y: P[0].y };
     root.querySelector('#ey').textContent = lvl === 'eigen' ? 'Spiel · eigener Draht' : `Spiel · Level ${lvl + 1} von ${WORLDS.length}`;
-    root.querySelector('#ti').textContent = 'Heisser Draht: ' + W.name;
+    root.querySelector('#ti').textContent = 'Draht-Spiel: ' + W.name;
     drawStatic(); bar(); hud();
   }
   function drawStatic(){

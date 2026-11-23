@@ -1,4 +1,4 @@
-// Lichtwächter-Labor – Start, Anmeldung, Labor-Übersicht, Navigation
+// Heisser Draht – Start, Anmeldung, Labor-Übersicht, Navigation
 import { DEFS, lumo, esc } from './draw.js';
 import { store, loadLocal, save, api, STATIONS, isDone, isOpen, nextStation, toast, sfx, stationState } from './ui.js';
 import * as posten from './posten.js';
@@ -21,13 +21,35 @@ function boot(){
   const path = location.pathname.replace(/\/+$/, '');
   if (path === '/lehrer' || location.hash.startsWith('#/lehrer')){ lehrer(app); return; }
   const q = new URLSearchParams(location.search);
+  if (takeAusweis()) return;
   if (path === '/einfach' || q.has('einfach')){ startSimple(false); }
   else {
     const tok = localStorage.getItem('lw-token');
     if (tok){ store.token = tok; store.mode = 'code'; store.name = localStorage.getItem('lw-name') || ''; loadLocal(); syncMe(); }
   }
-  window.addEventListener('hashchange', route);
+  if (!listening){ listening = true; window.addEventListener('hashchange', route); }
   route();
+}
+
+function takeAusweis(){
+  const aus = (location.hash.match(/ausweis=([^&]+)/) || [])[1];
+  if (!aus) return false;
+  history.replaceState(null, '', location.pathname + '#/labor'); loginAusweis(decodeURIComponent(aus)); return true;
+}
+let listening = false;
+async function loginAusweis(a){
+  app.innerHTML = `<div class="startbg"><svg viewBox="-130 -130 260 240" width="200" height="185"><use href="#lumoAwake"/></svg><div class="h1">Einen Moment …</div></div>`;
+  if (!listening){ listening = true; window.addEventListener('hashchange', route); }
+  try{
+    const r = await api('loginAusweis', { ausweis: a });
+    store.token = r.token; store.mode = 'code'; store.name = r.name; store.klasse = r.klasse;
+    localStorage.setItem('lw-token', r.token); localStorage.setItem('lw-name', r.name);
+    loadLocal(); location.hash = '#/labor'; route(); syncMe();
+  }catch(e){
+    const tok = localStorage.getItem('lw-token');
+    if (tok){ store.token = tok; store.mode = 'code'; store.name = localStorage.getItem('lw-name') || ''; loadLocal(); route(); syncMe(); return; }
+    route(); toast(esc(e.message), 'warn', 6000);
+  }
 }
 
 async function syncMe(){
@@ -66,6 +88,7 @@ function logout(){
 function startSimple(go = true){ store.mode = 'simple'; store.token = null; store.name = ''; loadLocal(); if (go) location.hash = '#/labor'; }
 
 function route(){
+  if (takeAusweis()) return;
   if (cleanup){ try{ cleanup(); }catch(e){} cleanup = null; }
   window.scrollTo(0, 0);
   const h = location.hash.replace(/^#\/?/, '');
@@ -83,14 +106,14 @@ function route(){
 function startScreen(){
   app.innerHTML = `<div class="startbg">
    <svg viewBox="-130 -130 260 240" width="230" height="210"><use href="#lumoAwake"/></svg>
-   <div class="eyebrow" style="font-size:15px">Werken · Heisser Draht</div>
-   <div class="bigtitle">Lichtwächter-Labor</div>
+   <div class="eyebrow" style="font-size:15px">Werken · TeG</div>
+   <div class="bigtitle">Heisser Draht</div>
    <div style="font-size:21px;color:#C9D3FF;margin-top:6px">Entdecke, wie Strom fliesst – und wecke den Lichtwächter auf!</div>
    <div class="startcards">
-    <div class="startcard primary"><h3>Mit meinem Code</h3><p>Dein Fortschritt wird gespeichert.</p>
+    <div class="startcard primary"><h3>Mit der Schapp</h3><p>Öffne die Schapp und tippe unter <b>Fächer › TeG</b> auf «Heisser Draht». Dann bist du automatisch angemeldet.</p><details style="margin-top:6px"><summary style="cursor:pointer;color:#8E9BD6;font-size:15px">Ich habe einen Code von der Lehrperson</summary>
      <div class="pinrow">${[0,1,2,3].map(i => `<div class="pinbox" data-p="${i}"></div>`).join('')}</div>
      <div class="keypad">${[1,2,3,4,5,6,7,8,9,'⌫',0,'OK'].map(k => `<button class="key" data-k="${k}">${k}</button>`).join('')}</div>
-    </div>
+    </details></div>
     <div class="startcard"><h3>Einfach üben</h3><p>Ohne Anmeldung sofort starten. Dein Stand bleibt nur auf diesem Gerät.</p><button class="btn ghost" id="simple" style="width:100%">Los geht's</button>
      <p style="margin-top:22px;font-size:14px;color:#8E9BD6">Lehrperson? <a href="#/lehrer" style="text-decoration:underline">Zum Lehrerbereich</a></p></div>
    </div></div>`;

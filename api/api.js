@@ -113,6 +113,25 @@ function pruefeAusweis(a){
   return p;
 }
 
+// ---- Eltern-Überblick für die Schapp ----
+const POSTEN = [
+  ['p1','Der Stromkreis','🔋'], ['p2','Leiter und Nichtleiter','🧲'], ['p3','Der Schalter','🔘'], ['p4','Der Kurzschluss','⚡'],
+  ['p5','Serienschaltung','💡'], ['p6','Parallelschaltung','💡'], ['ab3','Stromkreis-Detektiv','🔎'], ['ab4','Fehler-Detektiv','🛠️'],
+];
+const slugName = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+async function elternStand(kind, klasse){
+  const k = slugName(kind);
+  const all = await allClasses(await getIndex());
+  let s = null;
+  for (const c of all){ s = (c.students||[]).find(x => x.schapp === k); if (s) break; }
+  if (!s){ const c = all.find(x => String(x.name).trim().toLowerCase() === klasse.toLowerCase()); s = c && (c.students||[]).find(x => slugName(x.name) === k); }
+  if (!s) return null;
+  const doc = await readJSON('student/' + s.id + '.json');
+  const st = (doc && doc.state && doc.state.st) || {};
+  const levels = POSTEN.map(([id, titel, emoji]) => ({ id, titel, emoji, status: st[id] && st[id].done ? 'fertig' : st[id] ? 'angefangen' : 'offen' }));
+  return { app:'heisser-draht', levels, zuletzt: doc && doc.updated ? new Date(doc.updated).toISOString() : null };
+}
+
 const failures = new Map();
 function cleanState(st){
   // nur bekannte, kleine Felder übernehmen
@@ -127,6 +146,16 @@ export default async function handler(req, res){
   if (req.method === 'GET' && String(req.url||'').includes('health')){
     try{ const sql = await db(); const r = await sql`SELECT count(*)::int AS n FROM lw_kv`; return res.json({ ok:true, db:true, eintraege:r[0].n, lehrerPasswort:!!TEACHER_PASSWORD }); }
     catch(e){ return res.status(503).json({ ok:false, db:false, grund: e && e.noDb ? 'keine DATABASE_URL' : 'Verbindungsfehler' }); }
+  }
+  // Schapp › Eltern › Lern-Apps: Stand eines Kindes (nur erledigt / angefangen pro Posten). Header x-eltern-token = ELTERN_TOKEN.
+  if (req.method === 'GET' && String(req.url||'').includes('eltern=')){
+    const et = process.env.ELTERN_TOKEN;
+    if (!et || !safeEq(String(req.headers['x-eltern-token']||''), et)) return res.status(403).json({ error:'Kein Zugang' });
+    try{
+      const q = new URL(req.url, 'http://x').searchParams;
+      const st = await elternStand(String(q.get('eltern')||''), String(q.get('klasse')||'5b'));
+      return st ? res.json(st) : res.status(404).json({ error:'Unbekanntes Kind' });
+    }catch(e){ return res.status(500).json({ error:'Daten konnten nicht geladen werden.' }); }
   }
   if (req.method !== 'POST'){ res.status(405).json({error:'Nur POST'}); return; }
   let body = req.body;

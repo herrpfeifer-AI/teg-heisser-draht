@@ -52,11 +52,13 @@ export const store = {
 function fresh(){ return { v:1, st:{}, funken:0, data:{} }; }
 
 export function loadLocal(){
+  if (store.vorschau){ store.s = fresh(); return; } // Eltern-Vorschau: nichts aus dem Browser laden
   try{ const raw = localStorage.getItem(localKey()); if (raw) store.s = Object.assign(fresh(), JSON.parse(raw)); else store.s = fresh(); }catch(e){ store.s = fresh(); }
 }
 const localKey = () => 'lw-state-' + (store.mode === 'code' ? (store.name || 'kind') : 'einfach');
 
 export function save(){
+  if (store.vorschau) return; // Eltern-Vorschau: nichts speichern
   try{ localStorage.setItem(localKey(), JSON.stringify(store.s)); }catch(e){}
   if (store.mode !== 'code') return;
   clearTimeout(store.saveTimer);

@@ -1,6 +1,15 @@
 // Werkbank: Bauteile auf den Tisch ziehen, Kabel von Anschluss zu Anschluss ziehen.
 import { solve } from './sim.js';
-import { DEFS, battery, lamp, toggle, taster, schlinge, clip, BAT_TERMS, LAMP_TERMS, SW_TERMS } from './draw.js';
+import { DEFS, battery, lamp, toggle, taster, schlinge, clip, symbol, BAT_TERMS, LAMP_TERMS, SW_TERMS } from './draw.js';
+
+// Schaltplan-Modus: Schaltzeichen, Anschlüsse an den Enden, gerade Leitungen
+const SCH_TERMS = { bat:{ p:{x:-50,y:0}, m:{x:50,y:0} }, lamp:{ a:{x:-50,y:0}, b:{x:50,y:0} }, toggle:{ a:{x:-50,y:0}, b:{x:50,y:0} } };
+function schSymbol(c, res){
+  if (c.type === 'bat') return `${symbol('bat')}<text x="-22" y="-26" font-size="20" font-weight="900" fill="#EAF0FF" text-anchor="middle">+</text><text x="24" y="-26" font-size="20" font-weight="900" fill="#EAF0FF" text-anchor="middle">–</text>`;
+  if (c.type === 'lamp'){ const b = res.bright[c.id] || 0; return `${b > 0.02 ? '<circle r="60" fill="url(#glow)"/><circle r="22" fill="#FFE680"/>' : ''}${symbol('lamp', b > 0.02 ? '#B8860B' : '#EAF0FF')}`; }
+  if (c.type === 'toggle') return c.closed ? `<g stroke="#3DD6B5" stroke-width="5" stroke-linecap="round"><line x1="-50" y1="0" x2="50" y2="0"/><circle cx="-20" r="4" fill="#3DD6B5"/></g>` : symbol('switch', '#FF8A5B');
+  return '';
+}
 import { sfx } from './ui.js';
 
 const W = 920, H = 560;
@@ -24,11 +33,12 @@ export function createBench(host, opts = {}){
   if (opts.initial){ st.comps = opts.initial.comps.map(c => ({...c})); st.cables = opts.initial.cables.map(c => ({...c})); }
   host.classList.add('bench');
   host.innerHTML = `<svg class="bench-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${DEFS}<rect x="0" y="0" width="${W}" height="${H}" rx="22" fill="#18214A"/><rect x="0" y="0" width="${W}" height="${H}" rx="22" fill="url(#dots)"/><g class="layer"></g></svg>
-   <div class="tray"><span class="tray-label">Bauteile – tippe oder ziehe auf den Tisch</span><div class="tray-items"></div></div>`;
+   <div class="tray"><span class="tray-label">${opts.schema ? 'Symbole' : 'Bauteile – tippe oder ziehe auf den Tisch'}</span><div class="tray-items"></div></div>`;
   const svg = host.querySelector('svg'), layer = host.querySelector('.layer'), tray = host.querySelector('.tray-items'), trayBox = host.querySelector('.tray');
   let res = null;
 
-  const terms = c => TYPES[c.type].terms;
+  const SCH = !!opts.schema;
+  const terms = c => SCH ? SCH_TERMS[c.type] : TYPES[c.type].terms;
   const tpos = id => { const [cid, t] = id.split('.'); const c = st.comps.find(x => x.id === cid); if (!c) return null; const o = terms(c)[t]; return { x: c.x + o.x, y: c.y + o.y, c }; };
   const pt = ev => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse()); return { x: q.x, y: q.y }; };
   const inSvg = ev => { const r = svg.getBoundingClientRect(); return ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom; };
@@ -46,6 +56,12 @@ export function createBench(host, opts = {}){
   }
   function cablePath(w){
     const A = tpos(w.a), B = tpos(w.b); if (!A || !B) return '';
+    if (SCH){ // gerade Linien wie mit dem Lineal
+      const sx = P => Math.sign(P.x - P.c.x) || 1;
+      const a1 = A.x + sx(A) * 28, b1 = B.x + sx(B) * 28;
+      if (Math.abs(A.y - B.y) < 2) return `M${A.x} ${A.y} L${B.x} ${B.y}`;
+      return `M${A.x} ${A.y} L${a1} ${A.y} L${a1} ${B.y} L${B.x} ${B.y}`;
+    }
     const dir = (P) => { const dx = P.x - P.c.x, dy = P.y - P.c.y; const l = Math.hypot(dx, dy) || 1; return { x: dx / l, y: dy / l }; };
     const da = dir(A), db = dir(B); const k = Math.max(60, Math.min(160, Math.hypot(A.x - B.x, A.y - B.y) * 0.45));
     return `M${A.x} ${A.y} C${A.x + da.x * k} ${A.y + da.y * k}, ${B.x + db.x * k} ${B.y + db.y * k}, ${B.x} ${B.y}`;
@@ -58,22 +74,23 @@ export function createBench(host, opts = {}){
       const d = cablePath(w); const i = res.cur[w.id] || 0; const flow = Math.abs(i) > 0.05;
       const sel = st.sel === w.id;
       s += `<path d="${d}" stroke="transparent" stroke-width="34" fill="none" data-cable="${w.id}"/>`;
-      s += `<path d="${d}" stroke="${sel ? '#FFD54A' : (res.short && flow ? '#FF6B6B' : '#D9823B')}" stroke-width="10" fill="none" stroke-linecap="round" pointer-events="none"/>`;
+      s += `<path d="${d}" stroke="${sel ? '#FFD54A' : (res.short && flow ? '#FF6B6B' : (SCH ? '#EAF0FF' : '#D9823B'))}" stroke-width="${SCH ? 5 : 10}" fill="none" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>`;
       if (flow) s += `<path class="flow ${i < 0 ? 'rev' : ''}" d="${d}" stroke="#FFE680" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="1 26" pointer-events="none" style="animation-duration:${Math.max(0.25, 1.6 / Math.min(8, Math.abs(i)))}s"/>`;
     }
     // Bauteile
     for (const c of st.comps){
       let g = '';
-      if (c.type === 'bat') g = battery({ hot: res.short, empty: c.empty });
+      if (SCH) g = schSymbol(c, res);
+      else if (c.type === 'bat') g = battery({ hot: res.short, empty: c.empty });
       else if (c.type === 'lamp') g = lamp(res.bright[c.id] || 0, { out: c.out, broken: c.broken });
       else if (c.type === 'toggle') g = toggle(c.closed);
       else if (c.type === 'taster') g = taster(c.pressed);
       else if (c.type === 'schlinge') g = schlinge(c.pressed);
-      const r = TYPES[c.type].r;
+      const r = SCH ? 55 : TYPES[c.type].r;
       s += `<g transform="translate(${c.x} ${c.y})" class="comp ${st.sel === c.id ? 'sel' : ''}" data-comp="${c.id}"><circle r="${r}" fill="transparent"/>${g}</g>`;
     }
     // Büroklammern an der Batterie
-    for (const w of st.cables) for (const e of [w.a, w.b]) if (/\.(p|m)$/.test(e)){ const P = tpos(e); if (P) s += clip(P.x, P.y); }
+    if (!SCH) for (const w of st.cables) for (const e of [w.a, w.b]) if (/\.(p|m)$/.test(e)){ const P = tpos(e); if (P) s += clip(P.x, P.y); }
     // Anschlüsse
     for (const c of st.comps) for (const [t, o] of Object.entries(terms(c))){
       s += `<circle cx="${c.x + o.x}" cy="${c.y + o.y}" r="22" fill="transparent" data-term="${c.id}.${t}"/><circle cx="${c.x + o.x}" cy="${c.y + o.y}" r="9" fill="none" stroke="#FFD54A" stroke-width="2.5" stroke-dasharray="3 3" pointer-events="none" class="term-ring"/>`;
@@ -100,10 +117,11 @@ export function createBench(host, opts = {}){
       const left = n - count(t);
       return `<button class="tray-item ${left <= 0 ? 'empty' : ''}" data-add="${t}">${trayIcon(t)}<span>${TYPES[t].name}${n > 1 ? ` (${Math.max(0, left)})` : ''}</span></button>`;
     }).join('');
-    const extra = `<div class="tray-tip">Kabel: Ziehe von einem <b>gelben Kreis</b> zum anderen.</div>`;
+    const extra = SCH ? `<div class="tray-tip">Leitung: Ziehe von einem <b>gelben Kreis</b> zum anderen.</div>` : `<div class="tray-tip">Kabel: Ziehe von einem <b>gelben Kreis</b> zum anderen.</div>`;
     if (tray.dataset.sig !== items){ tray.innerHTML = items + extra; tray.dataset.sig = items; }
   }
   function trayIcon(t){
+    if (SCH) return `<svg viewBox="-60 -40 120 80" width="70" height="46">${symbol(t === 'toggle' ? 'switch' : t)}</svg>`;
     const inner = t === 'bat' ? `<g transform="scale(.32)">${battery({label:false})}</g>` : t === 'lamp' ? `<g transform="translate(0 -6) scale(.5)">${lamp(0)}</g>` : `<g transform="scale(.45)">${t === 'toggle' ? toggle(false) : t === 'taster' ? taster(false) : schlinge(false)}</g>`;
     return `<svg viewBox="-40 -40 80 80" width="56" height="56">${inner}</svg>`;
   }

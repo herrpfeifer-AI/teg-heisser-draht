@@ -29,7 +29,7 @@ export function p1(root){
     { key:'cables', text:'Verbinde alles mit 2 Kabeln. Ziehe von einem gelben Kreis zum anderen.' },
     { key:'light', text:'Bringe das Lämpchen zum Leuchten.' },
     { key:'open', text:'Entferne ein Kabel (antippen, dann ✕). Was passiert?' },
-    { key:'sym', text:'Zeichne deinen Stromkreis mit Symbolen.' },
+    { key:'sym', text:'Zeichne deinen Stromkreis als Schaltplan mit Symbolen.' },
   ];
   const draw = tasksRunner(ui, ID, defs);
   let wasLit = !!s.steps.light;
@@ -60,42 +60,43 @@ export function p1(root){
        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:16px">${symOrder.map(k => `<button class="choice ${matched[k] ? 'right' : ''}" data-sym="${k}" style="text-align:center"><svg viewBox="-60 -40 120 80" width="120" height="80">${symbol(k, matched[k] ? '#3DD6B5' : '#EAF0FF')}</svg><div style="font-size:15px;color:#8E9BD6">${matched[k] ? parts.find(p => p.k === k).n : 'Symbol'}</div></button>`).join('')}</div></div>
        <div id="plan" style="margin-top:16px"></div>`;
       const mDone = Object.keys(matched).length === 4;
-      ui.tasks([{ text:'Verbinde jedes Bauteil mit seinem Symbol.', done: mDone, now: !mDone }, { text:'Ergänze die Schaltpläne.', now: mDone }, { text:'Zeichne den Plan in dein Heft.' }]);
+      ui.tasks([{ text:'Verbinde jedes Bauteil mit seinem Symbol.', done: mDone, now: !mDone }, { text:'Zeichne den Schaltplan ohne Schalter.', now: mDone }, { text:'Zeichne den Schaltplan mit Schalter.' }]);
       ui.stage.querySelectorAll('[data-part]').forEach(b => b.onclick = () => { if (matched[b.dataset.part]) return; pick = b.dataset.part; sfx('tick'); drawMatch(); });
       ui.stage.querySelectorAll('[data-sym]').forEach(b => b.onclick = () => {
         if (!pick){ toast('Tippe zuerst auf ein Bauteil oben.', 'info'); return; }
-        if (b.dataset.sym === pick){ matched[pick] = true; pick = null; sfx('ok'); if (Object.keys(matched).length === 4){ step(ID, 'match'); drawMatch(); plan(0); return; } }
+        if (b.dataset.sym === pick){ matched[pick] = true; pick = null; sfx('ok'); if (Object.keys(matched).length === 4){ step(ID, 'match'); toast('Alle Symbole richtig! Jetzt zeichnest du selber.'); setTimeout(() => plan(0), 1200); drawMatch(); return; } }
         else { fails++; sfx('no'); toast('Das passt nicht. Schau genau!', 'warn'); }
         drawMatch();
       });
-      if (Object.keys(matched).length === 4) plan(planStep);
     }
     let planStep = 0;
+    // Schaltpläne selber zeichnen: Symbole liegen bereit, Leitungen ziehen
     const PLANS = [
-      { q:'In diesem Schaltplan fehlt ein Bauteil. Das Lämpchen soll leuchten. Was fehlt?', missing:'lamp', has:['bat','wire'] },
-      { q:'Dieser Stromkreis hat schon Batterie und Lämpchen. Er soll ein- und ausschaltbar sein. Was fehlt?', missing:'switch', has:['bat','lamp'] },
+      { q:'Zeichne deinen Stromkreis: Ziehe die Leitungen von der Batterie zum Lämpchen und wieder zurück.', parts:{ bat:1, lamp:1 },
+        comps:[{ id:'B1', type:'bat', x:300, y:430 }, { id:'L1', type:'lamp', x:620, y:150 }],
+        ok:(res) => res.anyLit && !res.short },
+      { q:'Jetzt mit Schalter: Zeichne die Leitungen und schliesse den Schalter (antippen).', parts:{ bat:1, lamp:1, toggle:1 },
+        comps:[{ id:'B1', type:'bat', x:300, y:450 }, { id:'L1', type:'lamp', x:640, y:300 }, { id:'S1', type:'toggle', x:330, y:140 }],
+        ok:(res) => res.anyLit && !res.short && Math.abs(res.cur.S1 || 0) > 0.05 },
     ];
     function plan(i){
-      planStep = i; const P = PLANS[i]; const host = ui.stage.querySelector('#plan'); if (!host) return;
-      const slot = (k, x, y, rot) => `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-58" y="-34" width="116" height="68" fill="#18214A"/>${symbol(k)}</g>`;
-      const svg = `<svg viewBox="0 0 700 330" style="width:100%;max-height:300px"><rect width="700" height="330" rx="18" fill="#18214A"/><rect width="700" height="330" rx="18" fill="url(#dots)"/>
-        <path d="M150 70 L550 70 L550 270 L150 270 Z" stroke="#EAF0FF" stroke-width="5" fill="none"/>
-        ${slot('bat', 150, 170, 90)}
-        ${P.has.includes('lamp') ? slot('lamp', 550, 170, 90) : ''}
-        <rect x="290" y="34" width="120" height="72" rx="12" fill="#18214A" stroke="#FFD54A" stroke-width="3" stroke-dasharray="8 6"/><text x="350" y="82" text-anchor="middle" font-size="34" font-weight="900" fill="#FFD54A">?</text>
-        </svg>`;
-      const opts = ['bat', 'lamp', 'switch', 'wire'].filter(k => k !== 'bat');
-      host.innerHTML = `<div class="card">${svg}<div style="font-weight:800;font-size:19px;margin:12px 0">${P.q}</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${shuffle(opts).map(k => `<button class="choice" data-ans="${k}" style="text-align:center"><svg viewBox="-60 -40 120 80" width="110" height="70">${symbol(k)}</svg></button>`).join('')}</div></div>`;
-      host.querySelectorAll('[data-ans]').forEach(b => b.onclick = () => {
-        if (b.dataset.ans === P.missing){ b.classList.add('right'); sfx('ok'); setTimeout(() => { if (i + 1 < PLANS.length) plan(i + 1); else done(); }, 700); }
-        else { b.classList.add('wrong'); fails++; sfx('no'); }
-      });
-      host.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      planStep = i; const P = PLANS[i];
+      ui.stage.innerHTML = `<div style="display:flex;flex-direction:column;height:100%;gap:10px"><div class="card" style="padding:14px 18px;font-size:19px;font-weight:800">${i + 1}/2 · ${P.q}</div><div id="pl" style="flex:1;min-height:0"></div></div>`;
+      let fertig = false;
+      createBench(ui.stage.querySelector('#pl'), { schema:true, parts:P.parts, initial:{ comps:P.comps, cables:[] }, locked:P.comps.map(c => c.id), onChange(res){
+        if (fertig || !P.ok(res)) return;
+        fertig = true; sfx('ok');
+        toast(i === 0 ? 'Richtig! Dein Schaltplan ist ein geschlossener Stromkreis.' : 'Super! Der Schalter schliesst den Stromkreis.');
+        setTimeout(() => { if (i + 1 < PLANS.length) plan(i + 1); else done(); }, 1400);
+      }});
+      ui.tasks([{ text:'Verbinde jedes Bauteil mit seinem Symbol.', done:true }, { text:'Zeichne den Schaltplan ohne Schalter.', done: i > 0, now: i === 0 }, { text:'Zeichne den Schaltplan mit Schalter.', now: i === 1 }]);
+      ui.hint('<b>So geht\'s:</b> Ziehe mit dem Finger oder Stift von einem <b>gelben Kreis</b> zum anderen. Die Leitung wird automatisch gerade. Falsche Leitung? Antippen, dann ✕.');
+      ui.buttons([]);
     }
     function done(){
       step(ID, 'sym', 2); draw();
-      ui.hint('<b>Zum Schluss:</b> Zeichne deinen Stromkreis mit Symbolen auch in dein Heft. Alle Linien sind gerade, wie mit dem Lineal.');
-      ui.buttons([{ label:'Ich habe gezeichnet ✓', primary:true, fn(){ const stars = fails === 0 ? 3 : fails <= 2 ? 2 : 1; finish(ID, stars); celebrate('Posten 1 geschafft!', 'Du weisst jetzt: Strom fliesst nur in einem geschlossenen Stromkreis.', stars, back); } }]);
+      ui.hint('<b>Super!</b> So zeichnet man Stromkreise: mit Symbolen und geraden Linien. Zeichne deinen Plan auch ins Werkheft (S. 6).');
+      ui.buttons([{ label:'Fertig ✓', primary:true, fn(){ const stars = fails === 0 ? 3 : fails <= 2 ? 2 : 1; finish(ID, stars); celebrate('Posten 1 geschafft!', 'Du weisst jetzt: Strom fliesst nur in einem geschlossenen Stromkreis.', stars, back); } }]);
     }
     ui.hint('<b>Tipp:</b> Ein Schaltplan ist wie eine Landkarte für den Strom.');
     ui.buttons([{ label:'‹ Zurück zur Werkbank', fn: partA }]);

@@ -95,7 +95,7 @@ export function p1(root){
     }
     function done(){
       step(ID, 'sym', 2); draw();
-      ui.hint('<b>Super!</b> So zeichnet man Stromkreise: mit Symbolen und geraden Linien. Zeichne deinen Plan auch ins Werkheft (S. 6).');
+      ui.hint('<b>Super!</b> So zeichnet man Stromkreise: mit Symbolen und geraden Linien. Zeichne den Stromplan deines Spiels jetzt in dein Dossier (1.6 Stromplan).');
       ui.buttons([{ label:'Fertig ✓', primary:true, fn(){ const stars = fails === 0 ? 3 : fails <= 2 ? 2 : 1; finish(ID, stars); celebrate('Posten 1 geschafft!', 'Du weisst jetzt: Strom fliesst nur in einem geschlossenen Stromkreis.', stars, back); } }]);
     }
     ui.hint('<b>Tipp:</b> Ein Schaltplan ist wie eine Landkarte für den Strom.');

@@ -81,10 +81,21 @@ async function usedPins(idx){ const used = new Set(); for (const c of await allC
 const settingsOf = c => Object.assign({}, DEFAULT_CLASS_SETTINGS, c.settings || {});
 function publicClass(c){ return { code:c.code, name:c.name, settings:settingsOf(c) }; }
 
+/* ---------- Zugänge für andere Lehrpersonen (je eine Klasse) ----------
+   lp-zugang.json = { <Klassen-Code>: { code, erstellt } }. Nur das Haupt-Passwort (TEACHER_PASSWORD)
+   darf Zugänge erstellen, erneuern oder löschen. Ein Klassen-Token (r:'t', k, z) gilt nur, solange
+   der Zugang mit genau diesem Erstell-Zeitpunkt noch besteht (neuer Code oder Löschen sperrt sofort). */
+async function getZugang(){ return (await readJSON('lp-zugang.json')) || {}; }
+const ZCHARS = 'abcdefghjkmnpqrstuvwxyz23456789';
+const zTeil = () => Array.from(crypto.randomBytes(4), x => ZCHARS[x % ZCHARS.length]).join('');
+const zSlug = n => String(n||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').slice(0,8) || 'klasse';
+const zNorm = v => String(v||'').normalize('NFC').trim().toLowerCase();
+
 async function runSeed(idx){
   const flag = await readJSON('seed.json');
   if (flag && flag.v >= SEED_VERSION) return;
   for (const sc of SEED_CLASSES){
+    if (flag && (sc.v || 1) <= flag.v) continue; // ältere Klassen nicht erneut auffüllen (gelöschte Kinder bleiben gelöscht)
     let c = null;
     for (const x of await allClasses(idx)) if (String(x.name).trim().toLowerCase() === sc.name.toLowerCase()){ c = x; break; }
     if (!c){
@@ -202,9 +213,12 @@ export default async function handler(req, res){
       if (!TEACHER_PASSWORD) return res.status(500).json({error:'Kein Lehrer-Passwort eingerichtet.'});
       const f = failures.get('teacher') || {n:0,t:0};
       if (f.n >= 10 && Date.now() - f.t < 10*60000) return res.status(429).json({error:'Zu viele Versuche. Bitte später nochmals probieren.'});
-      if (!safeEq(TEACHER_PASSWORD, String(body.password||''))){ failures.set('teacher',{n:f.n+1,t:Date.now()}); await sleep(700); return res.status(401).json({error:'Falsches Passwort.'}); }
-      failures.delete('teacher');
-      return res.json({ token: sign({r:'t', exp:Date.now()+14*DAY}) });
+      const pw = String(body.password||'');
+      if (safeEq(TEACHER_PASSWORD, pw)){ failures.delete('teacher'); return res.json({ token: sign({r:'t', exp:Date.now()+14*DAY}), admin:true }); }
+      const zg = await getZugang();
+      const kc = Object.keys(zg).find(k => zg[k] && zg[k].code && safeEq(zNorm(zg[k].code), zNorm(pw)));
+      if (kc){ failures.delete('teacher'); return res.json({ token: sign({r:'t', k:kc, z:zg[kc].erstellt, exp:Date.now()+14*DAY}), admin:false, klasse:kc }); }
+      failures.set('teacher',{n:f.n+1,t:Date.now()}); await sleep(700); return res.status(401).json({error:'Falsches Passwort.'});
     }
 
     if (a === 'status' || a === 'me' || a === 'save'){
@@ -227,20 +241,40 @@ export default async function handler(req, res){
 
     if (a && a.startsWith('t.')){
       if (!auth || auth.r !== 't') return res.status(401).json({error:'Bitte als Lehrperson anmelden.'});
+      const admin = !auth.k;
+      if (!admin){
+        const zg = await getZugang();
+        if (!zg[auth.k] || zg[auth.k].erstellt !== auth.z) return res.status(401).json({error:'Dein Zugang wurde geändert. Bitte mit dem neuen Code anmelden.'});
+      }
       const idx = await getIndex();
       if (a === 't.classes'){
         await runSeed(idx);
         const out = [];
-        for (const c of await allClasses(idx)) out.push({code:c.code, name:c.name, count:(c.students||[]).length});
-        return res.json({ classes: out });
+        for (const c of await allClasses(idx)) if (admin || c.code === auth.k) out.push({code:c.code, name:c.name, count:(c.students||[]).length});
+        return res.json({ classes: out, admin, klasse: admin ? null : auth.k });
+      }
+      if (a === 't.zugang' || a === 't.setZugang'){
+        if (!admin) return res.status(403).json({error:'Dafür hast du keinen Zugang.'});
+        const zg = await getZugang();
+        if (a === 't.setZugang'){
+          const kc = normCode(body.code);
+          const c = idx.classes.includes(kc) ? await getClass(kc) : null;
+          if (!c) return res.status(404).json({error:'Klasse nicht gefunden.'});
+          if (body.neu) zg[kc] = { code: 'draht-' + zSlug(c.name) + '-' + zTeil() + '-' + zTeil(), erstellt: Date.now() };
+          else delete zg[kc];
+          await writeJSON('lp-zugang.json', zg);
+        }
+        return res.json({ zugang: zg });
       }
       if (a === 't.createClass'){
+        if (!admin) return res.status(403).json({error:'Dafür hast du keinen Zugang.'});
         let code; do { code = genCode(6); } while (idx.classes.includes(code));
         const c = { code, name: cleanName(body.name) || 'Neue Klasse', created:Date.now(), students:[], settings:Object.assign({}, DEFAULT_CLASS_SETTINGS) };
         await saveClass(c); idx.classes.push(code); await writeJSON('index.json', idx);
         return res.json({ cls:{code:c.code, name:c.name, count:0} });
       }
       const code = normCode(body.code);
+      if (!admin && code !== auth.k) return res.status(403).json({error:'Dafür hast du keinen Zugang.'});
       if (!idx.classes.includes(code)) return res.status(404).json({error:'Klasse nicht gefunden.'});
       const c = await getClass(code);
       if (!c) return res.status(404).json({error:'Klasse nicht gefunden.'});

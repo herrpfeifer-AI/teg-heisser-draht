@@ -5,6 +5,7 @@ import { STATIONS, toast } from './ui.js';
 const COLS = ['p1','p2','p3','p4','p5','p6','ab3','ab4','wort','hd','sr'];
 const LABEL = { p1:'P1', p2:'P2', p3:'P3', p4:'P4', p5:'P5', p6:'P6', ab3:'AB 3', ab4:'AB 4', wort:'Wörter', hd:'Draht', sr:'Rätsel' };
 let token = localStorage.getItem('lw-teacher') || null;
+let isAdmin = true; // false = Lehrperson mit Klassen-Zugang (sieht nur ihre Klasse)
 
 async function tapi(a, data = {}){
   const r = await fetch('/api/api', { method:'POST', headers:{ 'Content-Type':'application/json', ...(token ? { Authorization:'Bearer ' + token } : {}) }, body: JSON.stringify({ a, ...data }) });
@@ -28,7 +29,7 @@ function frame(app, title, inner){
 function login(app){
   app.innerHTML = `<div class="light screen" style="align-items:center;justify-content:center"><div class="card" style="width:420px;box-shadow:0 10px 40px rgba(0,0,0,.08)">
    <div class="eyebrow">Heisser Draht</div><div class="h1" style="margin-bottom:14px">Lehrerbereich</div>
-   <input class="inp" type="password" id="pw" placeholder="Passwort" style="width:100%"><button class="btn" id="go" style="width:100%;margin-top:12px">Anmelden</button>
+   <input class="inp" type="password" id="pw" placeholder="Passwort oder Zugangscode" style="width:100%"><button class="btn" id="go" style="width:100%;margin-top:12px">Anmelden</button>
    <p style="margin-top:12px;font-size:14px;color:#6B74A0"><a href="/#/" style="text-decoration:underline">Zurück zur Kinder-Ansicht</a></p></div></div>`;
   const go = async () => {
     try{ const r = await tapi('teacherLogin', { password: app.querySelector('#pw').value }); token = r.token; localStorage.setItem('lw-teacher', token); classes(app); }
@@ -41,15 +42,50 @@ async function classes(app){
   const body = frame(app, 'Klassen', '<p>Lade …</p>');
   try{
     const r = await tapi('t.classes');
+    isAdmin = r.admin !== false;
+    if (!isAdmin){
+      // Klassen-Zugang: direkt die eigene Klasse öffnen
+      if (r.classes[0]) return klasse(app, r.classes[0].code);
+      body.innerHTML = '<div class="card"><b>Deine Klasse wurde nicht gefunden.</b></div>'; return;
+    }
     body.innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap">${r.classes.map(c => `<button class="card" data-c="${c.code}" style="min-width:220px;text-align:left;color:#1B1E2E"><div class="h1">${esc(c.name)}</div><div style="color:#6B74A0">${c.count} Kinder</div></button>`).join('')}
       <div class="card" style="min-width:260px"><div style="font-weight:800;margin-bottom:8px">Neue Klasse</div><input class="inp" id="nn" placeholder="z. B. 5a" style="width:100%"><button class="btn small" id="mk" style="margin-top:8px;width:100%">Anlegen</button></div></div>
-      <div class="card" style="margin-top:20px"><div style="font-weight:800">Einfache Version ohne Anmeldung (Parallelklasse)</div><p style="color:#4A5070;margin-top:6px">Link: <b>${location.origin}/einfach</b> – alle Stationen sind offen, gespeichert wird nur auf dem Gerät. Die Lehrperson sieht davon nichts.</p></div>`;
+      <div class="card" style="margin-top:20px"><div style="font-weight:800">Einfache Version ohne Anmeldung (Parallelklasse)</div><p style="color:#4A5070;margin-top:6px">Link: <b>${location.origin}/einfach</b> – alle Stationen sind offen, gespeichert wird nur auf dem Gerät. Die Lehrperson sieht davon nichts.</p></div>
+      <div class="card" style="margin-top:20px" id="zg"><div style="font-weight:800">Zugänge für andere Lehrpersonen</div><p style="color:#4A5070;margin-top:6px">Mit einem Klassen-Zugang sieht eine Lehrperson nur ihre Klasse: Fortschritt, Codes der Kinder, Freigaben, «Alle anhalten». Andere Klassen und diese Einstellungen sieht sie nicht. Sie meldet sich hier im Lehrerbereich mit dem Zugangscode an.</p><div id="zgl" style="margin-top:10px">Lade …</div></div>`;
+    zugaenge(body.querySelector('#zgl'), r.classes);
     body.querySelectorAll('[data-c]').forEach(b => b.onclick = () => klasse(app, b.dataset.c));
     body.querySelector('#mk').onclick = async () => { const n = body.querySelector('#nn').value.trim(); if (!n) return; await tapi('t.createClass', { name:n }); classes(app); };
   }catch(e){
     if (e.status === 401){ token = null; localStorage.removeItem('lw-teacher'); return login(app); }
     body.innerHTML = `<div class="card"><b>${esc(e.message)}</b>${e.noDb ? '<p style="margin-top:8px;color:#4A5070">Im Vercel-Projekt «lichtwaechter» fehlt noch die Datenbank (DATABASE_URL). Die Version «Einfach üben» funktioniert trotzdem.</p>' : ''}</div>`;
   }
+}
+
+async function zugaenge(el, klassen){
+  let zg = {};
+  const draw = () => {
+    el.innerHTML = klassen.map(c => {
+      const z = zg[c.code];
+      return `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 0;border-top:1px solid #EEF0F8">
+        <b style="min-width:90px">Klasse ${esc(c.name)}</b>
+        ${z ? `<span>Code: <b style="font-family:monospace;font-size:18px;letter-spacing:1px">${esc(z.code)}</b></span><span style="color:#6B74A0;font-size:13px">seit ${new Date(z.erstellt).toLocaleDateString('de-CH')}</span>
+          <button class="btn ghost small" data-z="copy" data-c="${c.code}">Kopieren</button><button class="btn ghost small" data-z="new" data-c="${c.code}">Neuer Code</button><button class="btn ghost small" data-z="del" data-c="${c.code}" style="color:#C0392B">Löschen</button>`
+        : `<span style="color:#6B74A0">kein Zugang</span><button class="btn small" data-z="make" data-c="${c.code}">Zugang erstellen</button>`}
+      </div>`;
+    }).join('');
+    el.querySelectorAll('[data-z]').forEach(b => b.onclick = async () => {
+      const c = klassen.find(x => x.code === b.dataset.c); const z = zg[c.code];
+      if (b.dataset.z === 'copy'){
+        const text = `Lehrerbereich Heisser Draht, Klasse ${c.name}\n${location.origin}/lehrer\nZugangscode: ${z.code}`;
+        try{ await navigator.clipboard.writeText(text); toast('Kopiert.', 'info'); }catch(e){ prompt('Zum Kopieren:', text); }
+        return;
+      }
+      if (b.dataset.z === 'new' && !confirm(`Neuer Code für Klasse ${c.name}? Der alte Code funktioniert dann nicht mehr.`)) return;
+      if (b.dataset.z === 'del' && !confirm(`Zugang für Klasse ${c.name} löschen? Die Lehrperson kann sich dann nicht mehr anmelden.`)) return;
+      try{ zg = (await tapi('t.setZugang', { code:c.code, neu: b.dataset.z !== 'del' })).zugang; draw(); }catch(e){ toast(esc(e.message), 'warn', 4000); }
+    });
+  };
+  try{ zg = (await tapi('t.zugang')).zugang || {}; draw(); }catch(e){ el.textContent = e.message; }
 }
 
 async function klasse(app, code){
@@ -61,9 +97,9 @@ async function klasse(app, code){
   function draw(){
     app.querySelector('.h1').textContent = 'Klasse ' + c.name;
     const tb = app.querySelector('#tb');
-    tb.innerHTML = `<button class="btn small" id="pause" style="background:${c.pause ? '#3DD6B5' : '#FF6B6B'};color:#fff">${c.pause ? '▶ Weiter lassen' : '⏸ Alle anhalten'}</button><button class="btn ghost small" id="back2">Alle Klassen</button>`;
+    tb.innerHTML = `<button class="btn small" id="pause" style="background:${c.pause ? '#3DD6B5' : '#FF6B6B'};color:#fff">${c.pause ? '▶ Weiter lassen' : '⏸ Alle anhalten'}</button>${isAdmin ? '<button class="btn ghost small" id="back2">Alle Klassen</button>' : ''}`;
     tb.querySelector('#pause').onclick = async () => { const r = await tapi('t.pause', { code, on: !c.pause }); c.pause = r.pause; draw(); toast(c.pause ? 'Alle Kinder sehen jetzt «Bitte schau nach vorne!»' : 'Die Kinder können weiterarbeiten.', 'info'); };
-    tb.querySelector('#back2').onclick = () => classes(app);
+    if (isAdmin) tb.querySelector('#back2').onclick = () => classes(app);
     // Häufigste Fehlvorstellung Posten 2
     const wrong = {}; c.students.forEach(s => { const t = s.state && s.state.data && s.state.data.p2 && s.state.data.p2.tests; if (t) for (const [k, v] of Object.entries(t)) if (!v.ok) wrong[k] = (wrong[k] || 0) + 1; });
     const top = Object.entries(wrong).sort((a, b) => b[1] - a[1]).slice(0, 3);

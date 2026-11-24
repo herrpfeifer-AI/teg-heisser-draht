@@ -129,7 +129,26 @@ const POSTEN = [
   ['p1','Der Stromkreis','🔋'], ['p2','Leiter und Nichtleiter','🧲'], ['p3','Der Schalter','🔘'], ['p4','Der Kurzschluss','⚡'],
   ['p5','Serienschaltung','💡'], ['p6','Parallelschaltung','💡'], ['ab3','Stromkreis-Detektiv','🔎'], ['ab4','Fehler-Detektiv','🛠️'],
 ];
+const pauseAktiv = c => !!(c && c.pause && c.pause.on && (!c.pause.until || c.pause.until > Date.now()));
 const slugName = s => String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+function postenStatus(st, id){ return st[id] && st[id].done ? 'fertig' : st[id] ? 'angefangen' : 'offen'; }
+async function lpUebersicht(klasse, nurSperre){
+  const all = await allClasses(await getIndex());
+  const c = all.find(x => String(x.name).trim().toLowerCase() === String(klasse||'').trim().toLowerCase());
+  if (!c) return null;
+  if (nurSperre){ const p = pauseAktiv(c) ? c.pause : null; return { app:'heisser-draht', klasse: c.name, freeze: { frozen: !!p, text: p ? (p.msg||'') : '', until: p ? (p.until||0) : 0 } }; }
+  const kinder = await Promise.all((c.students||[]).map(async s => {
+    const doc = await readJSON('student/' + s.id + '.json');
+    const st = (doc && doc.state && doc.state.st) || {};
+    return { id: s.schapp || slugName(s.name), name: s.name, levels: Object.fromEntries(POSTEN.map(([id]) => [id, postenStatus(st, id)])), zuletzt: doc && doc.updated ? new Date(doc.updated).toISOString() : null };
+  }));
+  const p = pauseAktiv(c) ? c.pause : null;
+  return {
+    app:'heisser-draht', klasse: c.name, klassen: all.map(x => x.name).filter(n => /^\d/.test(String(n))),
+    levels: POSTEN.map(([id, titel, emoji]) => ({ id, titel, emoji })),
+    freigabe: false, unlocked: [], freeze: { frozen: !!p, text: p ? (p.msg||'') : '', until: p ? (p.until||0) : 0 }, kinder,
+  };
+}
 async function elternStand(kind, klasse){
   const k = slugName(kind);
   const all = await allClasses(await getIndex());
@@ -159,6 +178,27 @@ export default async function handler(req, res){
     catch(e){ return res.status(503).json({ ok:false, db:false, grund: e && e.noDb ? 'keine DATABASE_URL' : 'Verbindungsfehler' }); }
   }
   // Schapp › Eltern › Lern-Apps: Stand eines Kindes (nur erledigt / angefangen pro Posten). Header x-eltern-token = ELTERN_TOKEN.
+  // Schapp › Lehrerbereich: Überblick einer Klasse und Anhalten (Header x-eltern-token = ELTERN_TOKEN)
+  const roh = typeof req.body === 'string' ? (() => { try { return JSON.parse(req.body); } catch { return null; } })() : req.body;
+  if (String(req.url||'').includes('lp=1') || (req.method === 'POST' && roh && roh.schapp)){
+    const et = process.env.ELTERN_TOKEN;
+    if (!et || !safeEq(String(req.headers['x-eltern-token']||''), et)) return res.status(403).json({ error:'Kein Zugang' });
+    try{
+      if (req.method === 'GET'){
+        const q = new URL(req.url, 'http://x').searchParams;
+        const u = await lpUebersicht(String(q.get('klasse')||'5b'), q.get('nur') === 'sperre');
+        return u ? res.json(u) : res.status(404).json({ error:'Unbekannte Klasse' });
+      }
+      if (roh.schapp !== 'freeze') return res.status(400).json({ error:'Im Heissen Draht gibt es keine Level-Freigabe.' });
+      const all = await allClasses(await getIndex());
+      const c = all.find(x => String(x.name).trim().toLowerCase() === String(roh.klasse||'').trim().toLowerCase());
+      if (!c) return res.status(404).json({ error:'Unbekannte Klasse' });
+      const min = Math.max(1, Math.min(30, Math.round(Number(roh.minutes) || 10)));
+      c.pause = roh.on === true ? { on:true, t:Date.now(), until: Date.now() + min*60000, msg: String(roh.text || 'Kurze Pause – schau nach vorne!').slice(0,120) } : null;
+      await saveClass(c);
+      return res.json({ freeze: { frozen: !!c.pause, text: c.pause ? c.pause.msg : '', until: c.pause ? c.pause.until : 0 } });
+    }catch(e){ return res.status(500).json({ error:'Daten konnten nicht geladen werden.' }); }
+  }
   if (req.method === 'GET' && String(req.url||'').includes('eltern=')){
     const et = process.env.ELTERN_TOKEN;
     if (!et || !safeEq(String(req.headers['x-eltern-token']||''), et)) return res.status(403).json({ error:'Kein Zugang' });
@@ -226,7 +266,7 @@ export default async function handler(req, res){
       const c = await getClass(auth.c);
       const s = c && (c.students||[]).find(x=>x.id === auth.sid);
       if (!s) return res.status(401).json({error:'Dein Zugang wurde entfernt. Bitte melde dich bei deiner Lehrperson.'});
-      if (a === 'status'){ const p = c.pause && c.pause.on ? c.pause : null; return res.json({ paused: !!p, msg: p ? (p.msg || '') : '', cls: publicClass(c) }); }
+      if (a === 'status'){ const p = pauseAktiv(c) ? c.pause : null; return res.json({ paused: !!p, msg: p ? (p.msg || '') : '', cls: publicClass(c) }); }
       const path = 'student/' + s.id + '.json';
       if (a === 'me'){
         const doc = (await readJSON(path)) || { id:s.id, state:null };

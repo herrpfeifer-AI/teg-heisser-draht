@@ -1,6 +1,7 @@
 /* Lehrerteil aus der Schapp \u00f6ffnen (LP 25.11.2026): Die Schapp schickt einen LP-Ausweis mit (#lpausweis=\u2026&zurueck=\u2026).
  * Mit data-pw-key legt dieses Skript den Ausweis dort ab, wo die App sonst das Lehrer-Passwort speichert (sessionStorage),
  * bevor die App startet \u2013 die App meldet sich damit an wie mit dem Passwort. Ohne data-pw-key \u00fcbernimmt die App das selbst.
+ * Mit data-code-key: #lpcode=1234 (Test-Konto der Lehrperson) wird als Kindercode gespeichert.
  * Dazu ein Knopf \u00ab\u2039 Schapp\u00bb unten links, solange man im Lehrerteil ist. Gleiches Skript in allen Lern-Apps.
  */
 (function () {
@@ -11,7 +12,14 @@
   var m = h.match(/lpausweis=([^&]+)/);
   var z = h.match(/zurueck=([^&]+)/);
   var OK = /^https:\/\/[a-z0-9.-]+\.(schapp\.ch|vercel\.app)(\/[^\s]*)?$/i;
+  // Kinderansicht der Lehrperson (Schapp): #lpcode=1234 = Code des Test-Kontos dieser App -> dort ablegen, wo die App den Kindercode speichert
+  var codeKey = s && s.getAttribute('data-code-key');
+  var c = h.match(/lpcode=(\d{4})/);
   try {
+    if (c && codeKey) {
+      localStorage.setItem(codeKey, c[1]);
+      history.replaceState(null, '', location.pathname + location.search);
+    }
     if (m) {
       var ziel = z ? decodeURIComponent(z[1]) : '';
       sessionStorage.setItem('schapp-zurueck', OK.test(ziel) ? ziel : 'https://schapp-erlenmatt.vercel.app/lehrer');

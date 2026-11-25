@@ -71,15 +71,15 @@ function pollPause(){
   clearInterval(pauseTimer);
   const tick = async () => {
     if (store.mode !== 'code' || document.hidden) return;
-    try{ const r = await api('status'); store.cls = r.cls || store.cls; showPause(r.paused, r.msg); }catch(e){}
+    try{ const r = await api('status'); store.cls = r.cls || store.cls; showPause(r.paused, r.msg, r.ruhe); }catch(e){}
   };
   pauseTimer = setInterval(tick, 15000); tick();
 }
-function showPause(on, msg){
+function showPause(on, msg, ruhe){
   let el = document.getElementById('pause');
   if (!on){ el && el.remove(); return; }
   if (!el){ el = document.createElement('div'); el.id = 'pause'; el.className = 'pause'; document.body.appendChild(el); }
-  el.innerHTML = `<svg viewBox="-130 -130 260 240" width="220" height="200"><use href="#lumoSleep"/></svg><div class="bigtitle" style="font-size:46px">Bitte schau nach vorne!</div><p style="font-size:20px;color:#C9D3FF">${esc(msg || 'Die Lehrperson möchte etwas sagen.')}</p>`;
+  el.innerHTML = `<svg viewBox="-130 -130 260 240" width="220" height="200"><use href="#lumoSleep"/></svg><div class="bigtitle" style="font-size:46px">${ruhe ? 'Ruhezeit – schlaf gut! 😴' : 'Bitte schau nach vorne!'}</div><p style="font-size:20px;color:#C9D3FF">${esc(msg || 'Die Lehrperson möchte etwas sagen.')}</p>`;
 }
 function logout(){
   localStorage.removeItem('lw-token'); localStorage.removeItem('lw-name');

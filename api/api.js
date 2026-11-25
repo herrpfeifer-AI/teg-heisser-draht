@@ -2,6 +2,7 @@ import { createHmac as _hmacAusweis, timingSafeEqual as _tseAusweis } from 'node
 // Heisser Draht – API (eine Funktion, Aktionen per JSON-Body)
 import crypto from 'node:crypto';
 import { SEED_VERSION, SEED_CLASSES } from '../lib/seed.js';
+import { schappAktiv } from '../lib/schapp-aktiv.js';
 
 const SECRET = process.env.SESSION_SECRET || 'dev-secret';
 const TEACHER_PASSWORD = process.env.TEACHER_PASSWORD || '';
@@ -266,7 +267,13 @@ export default async function handler(req, res){
       const c = await getClass(auth.c);
       const s = c && (c.students||[]).find(x=>x.id === auth.sid);
       if (!s) return res.status(401).json({error:'Dein Zugang wurde entfernt. Bitte melde dich bei deiner Lehrperson.'});
-      if (a === 'status'){ const p = pauseAktiv(c) ? c.pause : null; return res.json({ paused: !!p, msg: p ? (p.msg || '') : '', cls: publicClass(c) }); }
+      if (a === 'status'){
+        const p = pauseAktiv(c) ? c.pause : null;
+        // Schapp (25.11.): Nutzung melden, Ruhezeit (z. B. 20–7 Uhr) → schlafen
+        const r = p ? null : await schappAktiv('draht', c.name, s.name).catch(() => null);
+        if (r && r.ruhe) return res.json({ paused: true, ruhe: true, msg: 'Jetzt ist Ruhezeit bis ' + String(r.bis || '07:00').replace(':', '.').replace(/^0/, '') + ' Uhr. Leg das Tablet weg – gute Nacht!', cls: publicClass(c) });
+        return res.json({ paused: !!p, msg: p ? (p.msg || '') : '', cls: publicClass(c) });
+      }
       const path = 'student/' + s.id + '.json';
       if (a === 'me'){
         const doc = (await readJSON(path)) || { id:s.id, state:null };

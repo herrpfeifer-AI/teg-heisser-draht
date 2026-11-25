@@ -44,7 +44,7 @@ export function heisserDraht(root){
   root.innerHTML = `<div class="screen" style="background:#0B1030">
     <header class="top" style="background:transparent;border:0"><a class="back" href="#/labor">‹</a><div><div class="eyebrow" id="ey"></div><div class="h1" id="ti"></div></div><div class="spacer"></div>
      <div class="pill" id="err" style="color:#FF8A8A"></div><div class="pill" id="tm">⏱ 0:00</div><div class="pill"><span class="star">★</span> <span class="funken-n">${store.s.funken}</span></div></header>
-    <div style="flex:1;position:relative;min-height:0"><svg id="g" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;touch-action:none;display:block"></svg></div>
+    <div class="gamewrap" style="flex:1;position:relative;min-height:0"><svg id="g" viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;touch-action:none;display:block"></svg></div>
     <div id="bar" style="display:flex;gap:8px;padding:10px 20px;flex-wrap:wrap"></div></div>`;
   const svg = root.querySelector('#g');
   let P = [], R = 40, state = 'ready', ring = null, errors = 0, t0 = 0, timer = null, lastHit = 0, prog = 0, lit = false, drag = null, drawPts = null;

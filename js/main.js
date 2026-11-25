@@ -19,6 +19,7 @@ let cleanup = null;
 
 function boot(){
   const path = location.pathname.replace(/\/+$/, '');
+  if (!listening){ listening = true; window.addEventListener('hashchange', route); }
   if (path === '/lehrer' || location.hash.startsWith('#/lehrer')){ lehrer(app); return; }
   const q = new URLSearchParams(location.search);
   if (q.has('vorschau')){ startVorschau(); }
@@ -88,9 +89,10 @@ function logout(){
 }
 // Vorschau für Eltern (Link aus der Schapp: …?vorschau=1): alle Stationen offen, nichts wird gespeichert – auch nicht im Browser
 function startVorschau(){
+  const q0 = new URLSearchParams(location.search);
   store.vorschau = true; store.mode = 'simple'; store.token = null; store.name = ''; loadLocal();
   const bar = document.createElement('div');
-  bar.textContent = '👀 Vorschau für Eltern – hier wird nichts gespeichert.';
+  bar.textContent = q0.get('vorschau') === 'lp' ? '🧪 Testansicht für Lehrpersonen – alle Stationen offen, hier wird nichts gespeichert.' : '👀 Vorschau für Eltern – hier wird nichts gespeichert.';
   bar.style.cssText = 'position:sticky;top:0;z-index:50;background:#BAE3F9;color:#0B2A3C;text-align:center;font:600 15px system-ui,sans-serif;padding:8px 12px';
   document.body.prepend(bar);
   if (!location.hash || location.hash === '#/' || location.hash === '#') history.replaceState(null, '', location.pathname + location.search + '#/labor');

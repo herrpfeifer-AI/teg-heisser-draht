@@ -20,9 +20,11 @@ export function lehrer(app){
   classes(app);
 }
 
-function frame(app, title, inner){
-  app.innerHTML = `<div class="light screen"><header class="top noprint"><a class="back" href="/#/" style="background:#EEF0F8;color:#1B1E2E">‹</a><div><div class="eyebrow">Lehrerbereich · Heisser Draht</div><div class="h1">${esc(title)}</div></div><div class="spacer"></div><div id="tb" style="display:flex;gap:8px"></div><button class="btn ghost small" id="logout">Abmelden</button></header><div style="padding:22px 28px;overflow:auto;flex:1" id="body">${inner}</div></div>`;
+// back: was der Pfeil oben links macht (Standard: zur Kinder-Startseite)
+function frame(app, title, inner, back){
+  app.innerHTML = `<div class="light screen"><header class="top noprint" style="flex-wrap:wrap;row-gap:10px;height:auto;min-height:72px;padding-top:8px;padding-bottom:8px"><button class="back" id="backBtn" title="${back ? 'Zurück zu den Klassen' : 'Zur Kinder-Ansicht'}" style="background:#EEF0F8;color:#1B1E2E;border:0;cursor:pointer">‹</button><div><div class="eyebrow">Lehrerbereich · Heisser Draht</div><div class="h1">${esc(title)}</div></div><div class="spacer"></div><div id="tb" style="display:flex;gap:8px;flex-wrap:wrap"></div><a class="btn ghost small" href="/?vorschau=lp#/labor" target="_blank" rel="noopener" title="Öffnet die Kinder-App mit allen Stationen offen, nichts wird gespeichert">🧪 App testen</a><button class="btn ghost small" id="logout">Abmelden</button></header><div style="padding:22px 28px;overflow:auto;flex:1" id="body">${inner}</div></div>`;
   app.querySelector('#logout').onclick = () => { token = null; localStorage.removeItem('lw-teacher'); lehrer(app); };
+  app.querySelector('#backBtn').onclick = () => { if (back) back(); else location.href = '/#/'; };
   return app.querySelector('#body');
 }
 
@@ -89,7 +91,7 @@ async function zugaenge(el, klassen){
 }
 
 async function klasse(app, code){
-  const body = frame(app, 'Klasse', '<p>Lade …</p>');
+  const body = frame(app, 'Klasse', '<p>Lade …</p>', isAdmin ? () => classes(app) : null);
   let c;
   const load = async () => { c = (await tapi('t.class', { code })).cls; draw(); };
   const cell = (st, id) => { const x = st && st.st && st.st[id]; const v = !x ? 0 : x.done ? (x.stars >= 3 ? 3 : 2) : (x.started || Object.keys(x.steps || {}).length ? 1 : 0); return `<span class="dot ${v ? 'd' + v : ''}" title="${x && x.done ? '★'.repeat(x.stars || 0) : ''}"></span>`; };

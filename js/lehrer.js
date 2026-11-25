@@ -15,6 +15,15 @@ async function tapi(a, data = {}){
 }
 
 export function lehrer(app){
+  // Aus der Schapp: «Lehrerteil öffnen» schickt einen LP-Ausweis mit (#lpausweis=…) – damit anmelden, ohne Passwort
+  const lp = (location.hash.match(/lpausweis=([^&]+)/) || [])[1];
+  if (lp){
+    history.replaceState(null, '', '/#/lehrer');
+    tapi('teacherLogin', { password: decodeURIComponent(lp) })
+      .then(r => { token = r.token; localStorage.setItem('lw-teacher', token); isAdmin = r.admin !== false; classes(app); })
+      .catch(() => login(app));
+    return;
+  }
   if (location.hash !== '#/lehrer' && !location.hash.startsWith('#/lehrer')) history.replaceState(null, '', '/#/lehrer');
   if (!token) return login(app);
   classes(app);
